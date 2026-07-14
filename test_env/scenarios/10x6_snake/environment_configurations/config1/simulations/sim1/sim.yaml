@@ -2,7 +2,7 @@ source:
   sourceType: point
   position: [0.55, 3, 0.5]
   gasType: 0
-deltaTime: 0.1
+deltaTime: 0.01
 windIterationDeltaTime: 1
 temperature: 298
 pressure: 1

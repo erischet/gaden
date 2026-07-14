@@ -6,7 +6,7 @@ source:
     - 0.7
   position: [1, 4.95, 0.7]
   gasType: 0
-deltaTime: 0.1
+deltaTime: 1
 windIterationDeltaTime: 1
 temperature: 298
 pressure: 1
@@ -17,7 +17,7 @@ filamentNoise_std: 0.02
 numFilaments_sec: 10
 expectedNumIterations: 600
 saveResults: true
-saveDeltaTime: 0.5
+saveDeltaTime: 0
 preCalculateConcentrations: false
 windLooping:
   loop: false
