@@ -1,5 +1,23 @@
 Tools for authoring GADEN scenarios.
 
+## create_scenario_from_raw_data.py
+
+Scaffolds a brand-new scenario under `environments/scenarios/<name>` from a folder
+of raw CFD export data (an "_inner" STL and one or more wind CSVs - if several are
+present, the last/highest-numbered one is used). Creates the standard directory
+layout with all YAML files set to default values, and copies the STL/CSV into
+`cad_models/<name>_inner.stl` and `wind_simulations/static/wind_at_cell_centers_0.csv`.
+See the script's module docstring for details. No extra dependencies - runs with
+the system python3.
+
+Usage:
+
+    python3 environments/tools/create_scenario_from_raw_data.py path/to/raw_export_dir scenario_name
+
+Typical next steps: `generate_walls_and_obstacles.py` (derive walls/obstacle STLs
+from the copied `_inner.stl`), then `update_scenario_models.py` (point config.yaml
+at them).
+
 ## generate_walls_and_obstacles.py
 
 Derives a walls STL and per-obstacle STLs from a scenario's `_inner.stl` mesh.
