@@ -15,3 +15,5 @@ build
 result
 OccupancyGrid3D.csv
 wind
+
+environments/tools/.venv
