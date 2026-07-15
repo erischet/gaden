@@ -1,5 +1,21 @@
 Tools for authoring GADEN scenarios.
 
+## create_scenario.py
+
+Orchestrator that runs the other three tools below in sequence, wiring each
+one's output into the next (with the correct interpreter for each - the tools
+venv for `generate_walls_and_obstacles.py`, system `python3` for the rest).
+Equivalent to running them by hand; see their individual sections for what each
+stage actually does.
+
+Requires the `environments/tools/.venv` setup described under
+`generate_walls_and_obstacles.py` below.
+
+Usage:
+
+    python3 environments/tools/create_scenario.py path/to/raw_export_dir scenario_name \
+        [--thickness 0.2] [--config config1] [--force]
+
 ## create_scenario_from_raw_data.py
 
 Scaffolds a brand-new scenario under `environments/scenarios/<name>` from a folder
