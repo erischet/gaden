@@ -15,3 +15,17 @@ Usage:
 
     environments/tools/.venv/bin/python environments/tools/generate_walls_and_obstacles.py \
         path/to/scenario_inner.stl [--thickness 0.2] [--output-dir DIR] [--prefix NAME]
+
+## update_scenario_models.py
+
+Syncs a scenario's config.yaml `models:` list with its `cad_models/` folder, so a
+scenario's simulation config always references its walls/obstacle STLs (never the
+`_inner` CFD-only volume). Detects walls/obstacle files by filename (matching
+`*walls.stl` or containing `obstacle` - the convention `generate_walls_and_obstacles.py`
+produces). Errors out without touching config.yaml if neither is found.
+
+No extra dependencies - runs with the system python3.
+
+Usage:
+
+    python3 environments/tools/update_scenario_models.py path/to/scenario [--config config1] [--dry-run]
