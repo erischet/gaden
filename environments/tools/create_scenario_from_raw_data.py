@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Scaffold a new GADEN scenario from a folder of raw CFD export data.
 
-Takes a folder containing one "inner volume" STL (the CFD-only free-space mesh,
+Takes a folder (searched recursively, so the STL and CSVs don't need to sit in the
+same directory) containing one "inner volume" STL (the CFD-only free-space mesh,
 Part_2 in the GADEN_tutorial.md convention - filename does not matter) and one or
 more wind-vector-cloud CSVs from a CFD run. If several CSVs are present (e.g. one
 per timestep of a transient simulation), only the last (highest-numbered, most
@@ -83,7 +84,7 @@ configurationsDirectory: environment_configurations
 
 
 def find_inner_stl(input_dir: Path) -> Path:
-    stls = sorted(input_dir.glob("*.stl"))
+    stls = sorted(input_dir.rglob("*.stl"))
     if not stls:
         raise ValueError(f"no .stl file found in {input_dir}")
 
@@ -102,7 +103,7 @@ def find_inner_stl(input_dir: Path) -> Path:
 
 
 def find_last_iteration_csv(input_dir: Path) -> Path:
-    csvs = sorted(input_dir.glob("*.csv"))
+    csvs = sorted(input_dir.rglob("*.csv"))
     if not csvs:
         raise ValueError(f"no .csv file found in {input_dir}")
     if len(csvs) == 1:
