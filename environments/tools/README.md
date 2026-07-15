@@ -23,8 +23,12 @@ of raw CFD export data (an "_inner" STL and one or more wind CSVs - if several a
 present, the last/highest-numbered one is used). Creates the standard directory
 layout with all YAML files set to default values, and copies the STL/CSV into
 `cad_models/<name>_inner.stl` and `wind_simulations/static/wind_at_cell_centers_0.csv`.
-See the script's module docstring for details. No extra dependencies - runs with
-the system python3.
+The default gas source position is not `[0, 0, 0]` - it's computed via ray casting
+against the copied `_inner` mesh so it always lands strictly inside the free-space
+volume, regardless of where the room sits in the world frame. `saveDeltaTime` is
+also defaulted to `0`, so the filament simulator saves a result on every iteration
+instead of every 0.5s. See the script's module docstring for details. No extra
+dependencies - runs with the system python3.
 
 Usage:
 
@@ -63,3 +67,24 @@ No extra dependencies - runs with the system python3.
 Usage:
 
     python3 environments/tools/update_scenario_models.py path/to/scenario [--config config1] [--dry-run]
+
+## inspect_result_file.py
+
+Reads the filament simulator's binary `iteration_N` result files (see
+`gaden_filament_simulator`/`gaden_core`'s `RunningSimulation::SaveResults`) without
+needing a C++ build - pure Python, stdlib `zlib`/`struct` only. LIBBSC-compressed
+files (results bigger than ~5MB uncompressed) aren't supported; use the compiled
+`decompress` tool (built as part of `gaden_common`, at
+`build/gaden_common/third_party/gaden_core/utils/decompress/decompress`) for those.
+
+Given a single `iteration_N` file, prints a summary (grid dimensions/bounds, gas
+source, wind index, and concentration or filament stats) to stdout.
+
+Given a `result/` directory, decompresses every Nth iteration (`--step`, default
+10) and writes them all into a single tidy CSV, `results_readable.csv`, saved next
+to (as a sibling of) that `result/` directory.
+
+Usage:
+
+    python3 environments/tools/inspect_result_file.py path/to/result/iteration_100
+    python3 environments/tools/inspect_result_file.py path/to/result [--step 10] [--out path.csv]

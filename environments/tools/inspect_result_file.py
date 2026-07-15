@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Parse a GADEN filament_simulator 'iteration_N' result file (pure Python, no ROS/colcon needed).
+"""Parse GADEN filament_simulator 'iteration_N' result files (pure Python, no ROS/colcon needed).
 
 Format (gaden_core RunningSimulation::SaveResults / PlaybackSimulation::LoadLogfile):
   header (only in "modern" >=3.0 files):
@@ -27,7 +27,23 @@ Format (gaden_core RunningSimulation::SaveResults / PlaybackSimulation::LoadLogf
       - filaments:      count * (x,y,z,sigma float32)
       - concentrations:  count * float32   (one value per cell, x-fastest/then y/then z, i.e.
                                              index = x + y*dimx + z*dimx*dimy)
+
+Usage:
+  Inspect a single iteration file (prints a summary only):
+    python3 inspect_result_file.py path/to/result/iteration_100
+
+  Export a whole 'result' directory to a single human-readable CSV, written as
+  "results_readable.csv" next to (i.e. as a sibling of) the result directory:
+    python3 inspect_result_file.py path/to/result [--step 10] [--out path.csv]
+
+  --step controls how many of the iteration files are actually decompressed/exported:
+  with the default of 10, only iteration_0, iteration_10, iteration_20, ... are read.
+  Use --step 1 to export every iteration.
 """
+import argparse
+import csv
+import os
+import re
 import struct
 import sys
 import zlib
@@ -39,6 +55,8 @@ SOURCE_EXTRA = {
     "sphere": 4,    # float radius
     "cylinder": 8,  # float radius + float height
 }
+
+ITERATION_RE = re.compile(r"^iteration_(\d+)$")
 
 
 def read_len_prefixed_string(buf, off):
@@ -52,7 +70,6 @@ def parse(path):
     with open(path, "rb") as f:
         raw = f.read()
 
-    off = 0
     if raw[:12] == b"GADEN_RESULT":
         mode_byte = raw[13]
         (uncompressed_size,) = struct.unpack_from("<Q", raw, 14)
@@ -113,12 +130,7 @@ def parse(path):
     return result
 
 
-if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        print(f"usage: {sys.argv[0]} <path/to/iteration_N>")
-        sys.exit(1)
-
-    r = parse(sys.argv[1])
+def print_summary(r):
     print(f"gaden version   : {r['versionMajor']}.{r['versionMinor']}")
     print(f"grid dimensions : {r['dimensions']} ({r['dimensions'][0]*r['dimensions'][1]*r['dimensions'][2]} cells)")
     print(f"bounds          : {r['minCoord']} -> {r['maxCoord']}  (cellSize={r['cellSize']})")
@@ -135,3 +147,101 @@ if __name__ == "__main__":
         print(f"num active filaments: {len(r['filaments'])}")
         if r["filaments"]:
             print(f"first filament (x,y,z,sigma): {r['filaments'][0]}")
+
+
+def list_iterations(result_dir, step):
+    entries = []
+    for name in os.listdir(result_dir):
+        m = ITERATION_RE.match(name)
+        if m:
+            entries.append((int(m.group(1)), os.path.join(result_dir, name)))
+    entries.sort(key=lambda e: e[0])
+    return [(n, p) for n, p in entries if n % step == 0]
+
+
+def export_readable(result_dir, step=10, out_path=None):
+    """Decompress every `step`-th iteration file in `result_dir` and write them all
+    into a single CSV, in long/tidy format (one row per cell or per filament per
+    iteration). CSV was chosen because it's plain text (openable/greppable without
+    any tool), loads into pandas/Excel/etc. with zero extra parsing code, and a
+    tidy one-row-per-value layout works whether the grid size changes or not."""
+    result_dir = os.path.normpath(result_dir)
+    iterations = list_iterations(result_dir, step)
+    if not iterations:
+        raise RuntimeError(f"no iteration_N files found in '{result_dir}' matching step={step}")
+
+    if out_path is None:
+        out_path = os.path.join(os.path.dirname(result_dir), "results_readable.csv")
+
+    first = parse(iterations[0][1])
+    mode = first["mode"]
+    dimx, dimy, dimz = first["dimensions"]
+    minc = first["minCoord"]
+    cellSize = first["cellSize"]
+
+    with open(out_path, "w", newline="") as f:
+        f.write(f"# gaden_version: {first['versionMajor']}.{first['versionMinor']}\n")
+        f.write(f"# grid_dimensions: {dimx} {dimy} {dimz}\n")
+        f.write(f"# bounds_min: {minc[0]} {minc[1]} {minc[2]}\n")
+        f.write(f"# bounds_max: {first['maxCoord'][0]} {first['maxCoord'][1]} {first['maxCoord'][2]}\n")
+        f.write(f"# cell_size: {cellSize}\n")
+        f.write(f"# source_type: {first['sourceType']}\n")
+        f.write(f"# source_position: {first['sourcePosition'][0]} {first['sourcePosition'][1]} {first['sourcePosition'][2]}\n")
+        f.write(f"# gas_type: {first['gasType']}\n")
+        f.write(f"# mode: {mode}\n")
+        f.write(f"# step: {step}\n")
+
+        writer = csv.writer(f)
+        if mode == "concentrations":
+            writer.writerow(["iteration", "cell_x", "cell_y", "cell_z", "x_m", "y_m", "z_m", "concentration_ppm"])
+        else:
+            writer.writerow(["iteration", "filament_index", "x_m", "y_m", "z_m", "sigma"])
+
+        for n, path in iterations:
+            r = first if path == iterations[0][1] else parse(path)
+            if r["mode"] != mode:
+                raise RuntimeError(f"iteration_{n} has mode '{r['mode']}', expected '{mode}' "
+                                    "(mixed-mode result directories are not supported)")
+
+            if mode == "concentrations":
+                vals = r["concentrations"]
+                nonzero = sum(1 for v in vals if v > 0)
+                print(f"iteration_{n}: min={min(vals):.4g} max={max(vals):.4g} "
+                      f"mean={sum(vals)/len(vals):.4g} nonzero={nonzero}/{len(vals)}")
+                for idx, v in enumerate(vals):
+                    cz, rem = divmod(idx, dimx * dimy)
+                    cy, cx = divmod(rem, dimx)
+                    x_m = minc[0] + (cx + 0.5) * cellSize
+                    y_m = minc[1] + (cy + 0.5) * cellSize
+                    z_m = minc[2] + (cz + 0.5) * cellSize
+                    writer.writerow([n, cx, cy, cz, f"{x_m:.4f}", f"{y_m:.4f}", f"{z_m:.4f}", f"{v:.6g}"])
+            else:
+                filaments = r["filaments"]
+                print(f"iteration_{n}: {len(filaments)} active filaments")
+                for i, (x, y, z, sigma) in enumerate(filaments):
+                    writer.writerow([n, i, f"{x:.4f}", f"{y:.4f}", f"{z:.4f}", f"{sigma:.4f}"])
+
+    print(f"\nwrote {len(iterations)} iterations (step={step}) to '{out_path}'")
+    return out_path
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("path", help="a 'result' directory to export, or a single iteration_N file to inspect")
+    parser.add_argument("--step", type=int, default=10,
+                         help="when exporting a directory, only decompress every Nth iteration (default: 10)")
+    parser.add_argument("--out", default=None,
+                         help="output CSV path (default: 'results_readable.csv' next to the result directory)")
+    args = parser.parse_args()
+
+    if args.step < 1:
+        parser.error("--step must be >= 1")
+
+    if os.path.isdir(args.path):
+        export_readable(args.path, step=args.step, out_path=args.out)
+    else:
+        print_summary(parse(args.path))
+
+
+if __name__ == "__main__":
+    main()

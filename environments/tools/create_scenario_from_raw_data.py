@@ -22,14 +22,23 @@ steps after running it are generate_walls_and_obstacles.py (to derive walls/obst
 STLs from the copied _inner.stl) and update_scenario_models.py (to point
 config.yaml at them).
 
+The default gas source position is *not* the origin: since the _inner mesh is
+exactly the CFD free-space volume (obstacles/walls are holes in it, by
+construction - see generate_walls_and_obstacles.py's docstring), we pick a point
+that tests as strictly inside that mesh via ray casting, so the source always
+starts in free space regardless of where the room happens to sit in the world
+frame. No extra deps beyond the standard library are needed for this.
+
 Usage:
 
     python3 environments/tools/create_scenario_from_raw_data.py path/to/raw_export_dir scenario_name
 """
 
 import argparse
+import random
 import re
 import shutil
+import struct
 import sys
 from pathlib import Path
 
@@ -55,7 +64,7 @@ simulations:
 
 SIM_YAML_TEMPLATE = """source:
   sourceType: point
-  position: [0, 0, 0]
+  position: [{source_position[0]}, {source_position[1]}, {source_position[2]}]
   gasType: 0
 deltaTime: 0.1
 windIterationDeltaTime: 1
@@ -68,7 +77,7 @@ filamentNoise_std: 0.02
 numFilaments_sec: 10
 expectedNumIterations: 600
 saveResults: true
-saveDeltaTime: 0.5
+saveDeltaTime: 0
 preCalculateConcentrations: true
 windLooping:
   loop: false
@@ -125,6 +134,115 @@ def find_last_iteration_csv(input_dir: Path) -> Path:
     return csvs[-1]
 
 
+def _parse_stl_binary(data: bytes):
+    count = struct.unpack_from("<I", data, 80)[0]
+    triangles = []
+    offset = 84
+    for _ in range(count):
+        v1 = struct.unpack_from("<3f", data, offset + 12)
+        v2 = struct.unpack_from("<3f", data, offset + 24)
+        v3 = struct.unpack_from("<3f", data, offset + 36)
+        triangles.append((v1, v2, v3))
+        offset += 50
+    return triangles
+
+
+def _parse_stl_ascii(text: str):
+    triangles = []
+    verts = []
+    for line in text.splitlines():
+        line = line.strip()
+        if line.startswith("vertex"):
+            _, x, y, z = line.split()
+            verts.append((float(x), float(y), float(z)))
+            if len(verts) == 3:
+                triangles.append(tuple(verts))
+                verts = []
+    return triangles
+
+
+def load_stl_triangles(path: Path):
+    """Parse a binary or ASCII STL into a list of (v0, v1, v2) triangles. Stdlib only,
+    deliberately not using trimesh here so this script keeps its "no extra deps" property."""
+    data = path.read_bytes()
+    if len(data) >= 84:
+        count = struct.unpack_from("<I", data, 80)[0]
+        if 84 + count * 50 == len(data):
+            return _parse_stl_binary(data)
+    return _parse_stl_ascii(data.decode("ascii", errors="ignore"))
+
+
+def _cross(a, b):
+    return (a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0])
+
+
+def _dot(a, b):
+    return a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+
+
+def _sub(a, b):
+    return (a[0] - b[0], a[1] - b[1], a[2] - b[2])
+
+
+def _ray_intersects_triangle(origin, direction, triangle):
+    """Moeller-Trumbore ray-triangle intersection; True if the ray (origin + t*direction,
+    t > 0) crosses the triangle."""
+    eps = 1e-9
+    v0, v1, v2 = triangle
+    e1 = _sub(v1, v0)
+    e2 = _sub(v2, v0)
+    h = _cross(direction, e2)
+    a = _dot(e1, h)
+    if -eps < a < eps:
+        return False
+    f = 1.0 / a
+    s = _sub(origin, v0)
+    u = f * _dot(s, h)
+    if u < 0.0 or u > 1.0:
+        return False
+    q = _cross(s, e1)
+    v = f * _dot(direction, q)
+    if v < 0.0 or u + v > 1.0:
+        return False
+    t = f * _dot(e2, q)
+    return t > eps
+
+
+def point_in_mesh(point, triangles, direction=(1.0, 1e-4, 1e-4)):
+    """Even-odd rule: a point is inside a closed mesh if a ray cast from it crosses
+    the surface an odd number of times."""
+    crossings = sum(1 for tri in triangles if _ray_intersects_triangle(point, direction, tri))
+    return crossings % 2 == 1
+
+
+def find_free_space_point(triangles, attempts: int = 500, seed: int = 0):
+    """Find a point strictly inside the (closed, watertight) `_inner` mesh - which,
+    since obstacles/walls are holes cut out of it, is guaranteed to be free space."""
+    xs = [v[0] for tri in triangles for v in tri]
+    ys = [v[1] for tri in triangles for v in tri]
+    zs = [v[2] for tri in triangles for v in tri]
+    bbox_min = (min(xs), min(ys), min(zs))
+    bbox_max = (max(xs), max(ys), max(zs))
+
+    centroid = tuple((bbox_min[i] + bbox_max[i]) / 2 for i in range(3))
+    if point_in_mesh(centroid, triangles):
+        return centroid
+
+    rng = random.Random(seed)
+    for _ in range(attempts):
+        candidate = tuple(rng.uniform(bbox_min[i], bbox_max[i]) for i in range(3))
+        if point_in_mesh(candidate, triangles):
+            return candidate
+
+    print(
+        f"warning: could not find a point strictly inside {len(triangles)}-triangle inner mesh "
+        f"after {attempts} random attempts; falling back to its bounding-box centroid "
+        "(you will likely need to move the source position by hand)",
+        file=sys.stderr,
+    )
+    return centroid
+
+
 def create_scenario(input_dir: Path, name: str, force: bool):
     scenario_dir = SCENARIOS_ROOT / name
     if scenario_dir.exists() and not force:
@@ -156,7 +274,10 @@ def create_scenario(input_dir: Path, name: str, force: bool):
         CONFIG_YAML_TEMPLATE.format(wind_prefix="../../wind_simulations/static/wind_at_cell_centers")
     )
     (scenes_dir / "scene1.yaml").write_text(SCENE_YAML_TEMPLATE)
-    (sim_dir / "sim.yaml").write_text(SIM_YAML_TEMPLATE)
+
+    source_position = find_free_space_point(load_stl_triangles(dest_inner))
+    print(f"placing default gas source at {source_position} (inside the inner mesh's free space)")
+    (sim_dir / "sim.yaml").write_text(SIM_YAML_TEMPLATE.format(source_position=source_position))
     (scenario_dir / "gaden.gproj").write_text(GPROJ_TEMPLATE)
     print(f"scaffolded scenario at {scenario_dir}")
 
