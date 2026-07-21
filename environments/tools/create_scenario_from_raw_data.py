@@ -22,12 +22,20 @@ steps after running it are generate_walls_and_obstacles.py (to derive walls/obst
 STLs from the copied _inner.stl) and update_scenario_models.py (to point
 config.yaml at them).
 
-The default gas source position is *not* the origin: since the _inner mesh is
-exactly the CFD free-space volume (obstacles/walls are holes in it, by
-construction - see generate_walls_and_obstacles.py's docstring), we pick a point
-that tests as strictly inside that mesh via ray casting, so the source always
-starts in free space regardless of where the room happens to sit in the world
-frame. No extra deps beyond the standard library are needed for this.
+The default gas source position - and config.yaml's `empty_point` - are *not* the
+origin: since the _inner mesh is exactly the CFD free-space volume
+(obstacles/walls are holes in it, by construction - see
+generate_walls_and_obstacles.py's docstring), we pick a point that tests as
+strictly inside that mesh via ray casting, so both always land in free space
+regardless of where the room happens to sit in the world frame. `empty_point` is
+gaden_preprocessing's flood-fill seed (see Preprocessing::Fill); if it lands
+inside solid geometry instead, gaden_preprocessing force-seeds it as Free anyway,
+finds every neighbor already Obstacle, and the flood-fill can't propagate - so
+the entire environment except that one cell ends up marked Obstacle. `[0, 0, 0]`
+only worked by coincidence for CAD exports centered near the origin; it silently
+breaks for any room whose local frame starts at a corner instead (e.g. one
+derived from a 2D/SLAM map). No extra deps beyond the standard library are
+needed for this.
 
 Usage:
 
@@ -47,7 +55,7 @@ SCENARIOS_ROOT = Path(__file__).resolve().parent.parent / "scenarios"
 CONFIG_YAML_TEMPLATE = """models:
 outlets_models:
 unprocessed_wind_files: {wind_prefix}
-empty_point: [0, 0, 0]
+empty_point: [{empty_point[0]}, {empty_point[1]}, {empty_point[2]}]
 cell_size: 0.1
 uniformWind: false
 """
@@ -270,14 +278,20 @@ def create_scenario(input_dir: Path, name: str, force: bool):
     shutil.copyfile(wind_csv, dest_wind)
     print(f"wrote {dest_wind}")
 
+    # shared by config.yaml's empty_point (the preprocessing flood-fill seed) and
+    # sim.yaml's default gas source - both need a point guaranteed to be free space
+    free_point = find_free_space_point(load_stl_triangles(dest_inner))
+    print(f"using {free_point} as the free-space point (empty_point / default gas source)")
+
     (config_dir / "config.yaml").write_text(
-        CONFIG_YAML_TEMPLATE.format(wind_prefix="../../wind_simulations/static/wind_at_cell_centers")
+        CONFIG_YAML_TEMPLATE.format(
+            wind_prefix="../../wind_simulations/static/wind_at_cell_centers",
+            empty_point=free_point,
+        )
     )
     (scenes_dir / "scene1.yaml").write_text(SCENE_YAML_TEMPLATE)
 
-    source_position = find_free_space_point(load_stl_triangles(dest_inner))
-    print(f"placing default gas source at {source_position} (inside the inner mesh's free space)")
-    (sim_dir / "sim.yaml").write_text(SIM_YAML_TEMPLATE.format(source_position=source_position))
+    (sim_dir / "sim.yaml").write_text(SIM_YAML_TEMPLATE.format(source_position=free_point))
     (scenario_dir / "gaden.gproj").write_text(GPROJ_TEMPLATE)
     print(f"scaffolded scenario at {scenario_dir}")
 

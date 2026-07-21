@@ -23,11 +23,15 @@ of raw CFD export data (an "_inner" STL and one or more wind CSVs - if several a
 present, the last/highest-numbered one is used). Creates the standard directory
 layout with all YAML files set to default values, and copies the STL/CSV into
 `cad_models/<name>_inner.stl` and `wind_simulations/static/wind_at_cell_centers_0.csv`.
-The default gas source position is not `[0, 0, 0]` - it's computed via ray casting
-against the copied `_inner` mesh so it always lands strictly inside the free-space
-volume, regardless of where the room sits in the world frame. `saveDeltaTime` is
-also defaulted to `0`, so the filament simulator saves a result on every iteration
-instead of every 0.5s. See the script's module docstring for details. No extra
+The default gas source position - and config.yaml's `empty_point` (the
+preprocessing flood-fill seed) - are not `[0, 0, 0]`: both are set to the same
+point, computed via ray casting against the copied `_inner` mesh so it always
+lands strictly inside the free-space volume, regardless of where the room sits
+in the world frame. This matters for `empty_point` specifically - if it lands
+inside solid geometry instead, the preprocessing flood-fill can't propagate and
+the entire environment ends up marked Obstacle. `saveDeltaTime` is also defaulted
+to `0`, so the filament simulator saves a result on every iteration instead of
+every 0.5s. See the script's module docstring for details. No extra
 dependencies - runs with the system python3.
 
 Usage:
