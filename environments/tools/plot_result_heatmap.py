@@ -1,4 +1,11 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.10"
+# dependencies = [
+#     "matplotlib",
+#     "numpy",
+# ]
+# ///
 """Plot a GADEN filament_simulator iteration_N result file, with walls/obstacles
 overlaid from the scenario's OccupancyGrid3D.csv.
 
@@ -20,8 +27,10 @@ Either way the plot's title always states which mode was plotted, so a
 filament scatter is never mistaken for a concentration heatmap or vice versa.
 
 Reuses inspect_result_file.py's binary parser (same directory), so it stays in
-sync with that format automatically. Needs matplotlib + numpy, both already
-present in the system python3 on this machine - no venv required.
+sync with that format automatically. Needs matplotlib + numpy, declared inline
+above (PEP 723) and resolved/cached automatically by uv
+(https://docs.astral.sh/uv/) - run with `uv run plot_result_heatmap.py ...`, or
+directly as `./plot_result_heatmap.py ...` (the shebang already invokes uv).
 
 The occupancy overlay is auto-located from the standard scenario layout:
   <scenario>/environment_configurations/<config>/OccupancyGrid3D.csv
@@ -30,8 +39,8 @@ i.e. three directories up from the result file. Pass --occupancy to override, or
 --no-occupancy to skip it (e.g. if preprocessing hasn't produced that file yet).
 
 Usage:
-    python3 plot_result_heatmap.py path/to/result/iteration_100
-    python3 plot_result_heatmap.py path/to/result/iteration_100 --z 0 --out heatmap.png --no-show
+    uv run plot_result_heatmap.py path/to/result/iteration_100
+    uv run plot_result_heatmap.py path/to/result/iteration_100 --z 0 --out heatmap.png --no-show
 """
 import argparse
 import os

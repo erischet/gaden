@@ -1,4 +1,15 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.10"
+# dependencies = [
+#     "trimesh",
+#     "mapbox_earcut",
+#     "rtree",
+#     "shapely",
+#     "networkx",
+#     "scipy",
+# ]
+# ///
 """Generate a GADEN walls STL and per-obstacle STLs from a scenario's "_inner" mesh.
 
 The "_inner" CAD part (Part_2 in the GADEN_tutorial.md convention) represents the free
@@ -18,8 +29,15 @@ All output meshes are written in the exact same coordinate frame as the input
 "_inner" mesh (no re-centering or normalization), so every generated file, plus the
 original "_inner" file, share one coordinate system.
 
-This is a standalone authoring tool, not part of the ROS2 build - run it with the
-venv set up alongside this script (see environments/tools/.venv).
+This is a standalone authoring tool, not part of the ROS2 build. It needs packages
+beyond the standard library (trimesh, shapely, ...), declared inline above (PEP 723)
+and resolved/cached automatically by uv (https://docs.astral.sh/uv/) - no manual
+venv/pip setup needed. Run it with `uv run generate_walls_and_obstacles.py ...`, or
+directly as `./generate_walls_and_obstacles.py ...` (the shebang already invokes uv).
+
+(mapbox_earcut is the polygon-triangulation engine trimesh's extrude_polygon
+needs; manifold3d also provides one but is a much heavier compiled
+mesh-boolean library this script has no other use for.)
 """
 
 import argparse
@@ -27,7 +45,6 @@ import re
 import sys
 from pathlib import Path
 
-import numpy as np
 import trimesh
 from shapely.geometry import Polygon, box
 from shapely.ops import unary_union

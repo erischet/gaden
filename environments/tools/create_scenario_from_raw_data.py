@@ -1,4 +1,8 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.10"
+# dependencies = []
+# ///
 """Scaffold a new GADEN scenario from a folder of raw CFD export data.
 
 Takes a folder (searched recursively, so the STL and CSVs don't need to sit in the
@@ -39,7 +43,7 @@ needed for this.
 
 Usage:
 
-    python3 environments/tools/create_scenario_from_raw_data.py path/to/raw_export_dir scenario_name
+    uv run environments/tools/create_scenario_from_raw_data.py path/to/raw_export_dir scenario_name
 """
 
 import argparse

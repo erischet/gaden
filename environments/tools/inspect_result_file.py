@@ -1,4 +1,8 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.10"
+# dependencies = []
+# ///
 """Parse GADEN filament_simulator 'iteration_N' result files (pure Python, no ROS/colcon needed).
 
 Format (gaden_core RunningSimulation::SaveResults / PlaybackSimulation::LoadLogfile):
@@ -30,11 +34,11 @@ Format (gaden_core RunningSimulation::SaveResults / PlaybackSimulation::LoadLogf
 
 Usage:
   Inspect a single iteration file (prints a summary only):
-    python3 inspect_result_file.py path/to/result/iteration_100
+    uv run inspect_result_file.py path/to/result/iteration_100
 
   Export a whole 'result' directory to a single human-readable CSV, written as
   "results_readable.csv" next to (i.e. as a sibling of) the result directory:
-    python3 inspect_result_file.py path/to/result [--step 10] [--out path.csv]
+    uv run inspect_result_file.py path/to/result [--step 10] [--out path.csv]
 
   --step controls how many of the iteration files are actually decompressed/exported:
   with the default of 10, only iteration_0, iteration_10, iteration_20, ... are read.

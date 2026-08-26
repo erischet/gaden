@@ -1,4 +1,8 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.10"
+# dependencies = []
+# ///
 """Sync a scenario's config.yaml "models:" list with its cad_models/ folder.
 
 Detects walls and obstacle STLs by the naming convention produced by
@@ -16,7 +20,7 @@ This is a standalone authoring tool, not part of the ROS2 build.
 
 Usage:
 
-    python3 environments/tools/update_scenario_models.py path/to/scenario [--config config1] [--dry-run]
+    uv run environments/tools/update_scenario_models.py path/to/scenario [--config config1] [--dry-run]
 """
 
 import argparse
